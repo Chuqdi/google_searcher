@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search History - Django Search App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'search_app:index' %}">
+                <i class="fas fa-search me-2"></i>Search App
+            </a>
+            <a class="btn btn-outline-light" href="{% url 'search_app:index' %}">
+                <i class="fas fa-plus me-1"></i>New Search
+            </a>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>
+                        <i class="fas fa-history me-2 text-primary"></i>Search History
+                    </h2>
+                    <div class="text-muted">
+                        <i class="fas fa-cloud me-1"></i>Stored in AWS S3
+                    </div>
+                </div>
+                
+                <!-- Messages -->
+                {% if messages %}
+                    {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'warning' %}warning{% elif message.tags == 'success' %}success{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+                        <i class="fas fa-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'warning' %}exclamation-triangle{% elif message.tags == 'success' %}check-circle{% else %}info-circle{% endif %} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+                
+                {% if searches %}
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-list me-2"></i>Recent Searches
+                            </h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th><i class="fas fa-search me-1"></i>Query</th>
+                                            <th><i class="fas fa-calendar me-1"></i>Date & Time</th>
+                                            <th><i class="fas fa-chart-bar me-1"></i>Results</th>
+                                            <th><i class="fas fa-file me-1"></i>File</th>
+                                            <th><i class="fas fa-cog me-1"></i>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for search in searches %}
+                                            <tr>
+                                                <td>
+                                                    <strong class="text-dark">{{ search.query }}</strong>
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted">
+                                                        {{ search.created_at|date:"M d, Y" }}<br>
+                                                        {{ search.created_at|date:"H:i:s" }}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-primary rounded-pill">
+                                                        {{ search.results_count }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    {% if search.results_file %}
+                                                        <code class="text-success">{{ search.results_file }}</code>
+                                                    {% else %}
+                                                        <span class="text-muted">No file</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        {% if search.results_file %}
+                                                            {% if search.download_url %}
+                                                                <a href="{{ search.download_url }}" 
+                                                                   class="btn btn-outline-success" 
+                                                                   title="Download Results"
+                                                                   target="_blank">
+                                                                    <i class="fas fa-download"></i>
+                                                                </a>
+                                                            {% else %}
+                                                                <a href="{% url 'search_app:download_search_file' search.results_file %}" 
+                                                                   class="btn btn-outline-success" 
+                                                                   title="Download Results">
+                                                                    <i class="fas fa-download"></i>
+                                                                </a>
+                                                            {% endif %}
+                                                            
+                                                            <button type="button" 
+                                                                    class="btn btn-outline-danger" 
+                                                                    title="Delete File"
+                                                                    data-bs-toggle="modal" 
+                                                                    data-bs-target="#deleteModal{{ forloop.counter }}">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                            
+                                                            <!-- Delete Confirmation Modal -->
+                                                            <div class="modal fade" id="deleteModal{{ forloop.counter }}" tabindex="-1">
+                                                                <div class="modal-dialog">
+                                                                    <div class="modal-content">
+                                                                        <div class="modal-header">
+                                                                            <h5 class="modal-title">Confirm Delete</h5>
+                                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                                        </div>
+                                                                        <div class="modal-body">
+                                                                            <p>Are you sure you want to delete the search results for:</p>
+                                                                            <strong>"{{ search.query }}"</strong>
+                                                                            <p class="text-muted mt-2">This will permanently delete the file from S3 storage.</p>
+                                                                        </div>
+                                                                        <div class="modal-footer">
+                                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                                            <form method="post" action="{% url 'search_app:delete_search_file' search.results_file %}" class="d-inline">
+                                                                                {% csrf_token %}
+                                                                                <button type="submit" class="btn btn-danger">
+                                                                                    <i class="fas fa-trash me-1"></i>Delete
+                                                                                </button>
+                                                                            </form>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        {% else %}
+                                                            <span class="text-muted">No actions</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- S3 Files Management Section (if available) -->
+                    {% if s3_files %}
+                    <div class="card shadow-sm mt-4">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fab fa-aws me-2"></i>S3 Storage Files
+                            </h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th><i class="fas fa-file me-1"></i>Filename</th>
+                                            <th><i class="fas fa-calendar me-1"></i>Modified</th>
+                                            <th><i class="fas fa-weight me-1"></i>Size</th>
+                                            <th><i class="fas fa-cog me-1"></i>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for file in s3_files %}
+                                            <tr>
+                                                <td>
+                                                    <code class="text-primary">{{ file.filename }}</code>
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted">
+                                                        {{ file.last_modified|date:"M d, Y H:i" }}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary">{{ file.size|filesizeformat }}</span>
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <a href="{% url 'search_app:download_search_file' file.filename %}" 
+                                                           class="btn btn-outline-success" 
+                                                           title="Download">
+                                                            <i class="fas fa-download"></i>
+                                                        </a>
+                                                        
+                                                        <button type="button" 
+                                                                class="btn btn-outline-danger" 
+                                                                title="Delete File"
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#deleteS3Modal{{ forloop.counter }}">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                        
+                                                        <!-- Delete S3 File Modal -->
+                                                        <div class="modal fade" id="deleteS3Modal{{ forloop.counter }}" tabindex="-1">
+                                                            <div class="modal-dialog">
+                                                                <div class="modal-content">
+                                                                    <div class="modal-header">
+                                                                        <h5 class="modal-title">Confirm Delete</h5>
+                                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                                    </div>
+                                                                    <div class="modal-body">
+                                                                        <p>Are you sure you want to delete this file?</p>
+                                                                        <strong>{{ file.filename }}</strong>
+                                                                        <p class="text-muted mt-2">This action cannot be undone.</p>
+                                                                    </div>
+                                                                    <div class="modal-footer">
+                                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                                        <form method="post" action="{% url 'search_app:delete_search_file' file.filename %}" class="d-inline">
+                                                                            {% csrf_token %}
+                                                                            <button type="submit" class="btn btn-danger">
+                                                                                <i class="fas fa-trash me-1"></i>Delete
+                                                                            </button>
+                                                                        </form>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Statistics Card -->
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">
+                                        <i class="fas fa-chart-line text-success me-2"></i>Total Searches
+                                    </h5>
+                                    <h2 class="text-success">{{ searches|length }}</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">
+                                        <i class="fas fa-database text-info me-2"></i>Total Results
+                                    </h5>
+                                    <h2 class="text-info">
+                                        {% with total=0 %}
+                                            {% for search in searches %}
+                                                {% with total=total|add:search.results_count %}
+                                                {% endwith %}
+                                            {% endfor %}
+                                            {% firstof total 0 %}
+                                        {% endwith %}
+                                    </h2>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-4">
+                            <i class="fas fa-history text-muted" style="font-size: 4rem;"></i>
+                        </div>
+                        <div class="alert alert-info border-0 shadow-sm" style="max-width: 500px; margin: 0 auto;">
+                            <h4 class="alert-heading">
+                                <i class="fas fa-info-circle me-2"></i>No Search History
+                            </h4>
+                            <p class="mb-3">You haven't performed any searches yet. Start exploring the web with our search engine!</p>
+                            <hr>
+                            <a href="{% url 'search_app:index' %}" class="btn btn-primary">
+                                <i class="fas fa-search me-2"></i>Start Your First Search
+                            </a>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <!-- Back to Search Button -->
+                <div class="text-center mt-4">
+                    <a href="{% url 'search_app:index' %}" class="btn btn-lg btn-primary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Search
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript for enhanced functionality -->
+    <script>
+        // Auto-hide alerts after 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert-dismissible');
+            alerts.forEach(function(alert) {
+                setTimeout(function() {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                }, 5000);
+            });
+        });
+
+        // Add loading state to download buttons
+        document.querySelectorAll('a[href*="download"]').forEach(function(link) {
+            link.addEventListener('click', function() {
+                const icon = this.querySelector('i');
+                const originalClass = icon.className;
+                icon.className = 'fas fa-spinner fa-spin';
+                
+                setTimeout(function() {
+                    icon.className = originalClass;
+                }, 2000);
+            });
+        });
+    </script>
+</body>
+</html>
